@@ -2,7 +2,7 @@ import json
 from flask import request
 from functools import wraps
 
-from app import redis_db, app
+from app import redis_db_access, app
 
 """
 Этот декоратор проверяет есть ли у нас валидный токен в заголовке
@@ -13,10 +13,12 @@ def login_reqiured(func):
         if not request.headers.get('Authorization'):
             return {'message': 'Token not exist'}, 403
         token = request.headers.get('Authorization')
+        session = redis_db_access.get(token)
         if 'code' in request.get_json(force=True):
-            token += request.get_json(force=True).get('code')
-        session = redis_db.get(token)
-        if session:
+            request.get_json(force=True).get('code')
+            if session.decode('utf-8') == request.get_json(force=True).get('code'):
+                return func(*args, **kwargs)
+        elif session.decode('utf-8') == 'True':
             return func(*args, **kwargs)
         else:
             return app.response_class(

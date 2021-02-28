@@ -20,7 +20,7 @@ postgres_dsl = PostgresDsl(dbname=os.getenv('DB_NAME', 'auth'),
                            port=os.getenv('DB_PORT', 5434))
 
 
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY', 'develop')
 
 
 class Redis(BaseModel):
@@ -39,3 +39,4 @@ redis_1_params = Redis(host=os.getenv('REDIS_HOST', 'localhost'),
 
 TOKEN_TIME = 60 * 5
 PIN_CODE_TIME = 60
+REFRESH_TOKEN_TIME = 600 * 5

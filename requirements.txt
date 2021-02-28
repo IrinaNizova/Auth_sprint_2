@@ -13,4 +13,6 @@ flask-marshmallow==0.14.0
 pydantic==1.7.3
 user_agents==2.2.0
 pytest==6.2.2
+pyjwt==2.0.1
+flask-oauthlib==0.9.6
 

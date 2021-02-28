@@ -1,40 +1,37 @@
-from app import redis_db, db
+from app import redis_db_access, redis_db_refresh, db
 from flask import request
 from db.models import User, UserSignIn
 import datetime
 import bcrypt
-import secrets
-from config.config import TOKEN_TIME, PIN_CODE_TIME
+from config.config import TOKEN_TIME, PIN_CODE_TIME, REFRESH_TOKEN_TIME
 from helpers.results_map import *
 from utils.faker import send_code_to_email, get_random_code
 from user_agents import parse
+from utils.token import create_access_token, create_refresh_token, get_user_id_token
 
 
 class RedisTokensStorage:
-    def __init__(self, redis_adapter=redis_db):
+    def __init__(self, redis_adapter=redis_db_access):
         self.redis_adapter = redis_adapter
 
     def save_login_token(self, token, time, login) -> None:
         self.redis_adapter.setex(token, time, login)
 
-    def retrieve_login_by_token(self, token) -> str:
-        login = self.redis_adapter.get(token)
-        return login.decode('utf-8') if login else None
-
     def del_token(self, token):
-        redis_db.delete(token)
+        redis_db_access.delete(token)
 
 
-tokenStorage = RedisTokensStorage()
+AccessTokenStorage = RedisTokensStorage(redis_db_access)
+RefreshTokenStorage = RedisTokensStorage(redis_db_refresh)
 
 
 class LoginMain:
 
-    def __init__(self, login=None, token=None, code=''):
+    def __init__(self, login=None, token=None):
         if login:
             self.login = login
         elif token:
-            self.login = tokenStorage.retrieve_login_by_token(token+code)
+            self.login = get_user_id_token(token)
 
     def get_user_by_login(self):
         user = User.query.filter_by(login=self.login).first()
@@ -75,29 +72,30 @@ class Login1(LoginMain):
         return pin_code
 
     def set_temporary_token(self, pin_code):
-        token = secrets.token_hex()
-        redis_db.setex(token + pin_code, PIN_CODE_TIME, self.login)
-        return token
+        access_token = create_access_token(self.login)
+        retresh_token = create_refresh_token()
+        redis_db_access.setex(access_token, PIN_CODE_TIME, pin_code)
+        redis_db_refresh.setex(retresh_token, REFRESH_TOKEN_TIME, access_token)
+        return access_token, retresh_token
 
     def start_login(self):
         error = self.check_password()
         if error: return error
         pin_code = self.create_and_send_pin_code()
-        token = self.set_temporary_token(pin_code)
-        return SEND_PIN_CODE, token
+        access_token, retresh_token = self.set_temporary_token(pin_code)
+        return SEND_PIN_CODE, access_token, retresh_token
 
 
 class Login2(LoginMain):
 
     def __init__(self, pin_code, token):
-        super(Login2, self).__init__(token=token, code=pin_code)
+        super(Login2, self).__init__(token=token)
         self.pin_code = pin_code
         self.token = token
 
     def set_standart_token(self, token):
-        login = tokenStorage.retrieve_login_by_token(token + self.pin_code)
-        tokenStorage.del_token(token)
-        tokenStorage.save_login_token(token, TOKEN_TIME, login)
+        AccessTokenStorage.del_token(token)
+        AccessTokenStorage.save_login_token(token, TOKEN_TIME, 'True')
 
     def get_user_agent_type(self, user_agent):
         user_agent_string = parse(user_agent)
@@ -135,7 +133,7 @@ class ChangeLogin(LoginMain):
         self.token = token
 
     def check_eq_login(self):
-        redis_login = tokenStorage.retrieve_login_by_token(self.token)
+        redis_login = get_user_id_token(self.token)
         if redis_login != self.login:
             return NOT_VALID_LOGIN
 
@@ -178,12 +176,14 @@ class Sessions(LoginMain):
 
 
 def logout(token):
-    tokenStorage.del_token(token)
+    AccessTokenStorage.del_token(token)
 
 
-def create_refresh(old_token):
-    login = tokenStorage.retrieve_login_by_token(old_token)
-    tokenStorage.del_token(old_token)
-    token = secrets.token_hex()
-    tokenStorage.save_login_token(token, TOKEN_TIME, login)
-    return NEW_TOKEN_CREATED, token
+def create_refresh(refresh_token):
+    access_token = redis_db_refresh.get(refresh_token)
+    login = redis_db_access.retrieve_login_by_token(access_token)
+    AccessTokenStorage.del_token(access_token)
+    new_access_token = create_access_token(login)
+    AccessTokenStorage.save_login_token(new_access_token, TOKEN_TIME, login)
+    RefreshTokenStorage.save_login_token(refresh_token, REFRESH_TOKEN_TIME, new_access_token)
+    return NEW_TOKEN_CREATED, new_access_token

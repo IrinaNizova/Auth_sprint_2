@@ -12,18 +12,36 @@ class User(db.Model):
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=str(uuid.uuid4()))
     login = db.Column(db.String, unique=True, nullable=False)
-    password = db.Column(db.Binary, nullable=False)
+    password = db.Column(db.Binary, nullable=True)
+    email = db.Column(db.Text, nullable=True, unique=True)
 
-    def __init__(self, login, password):
+    def __init__(self, login, password=None, email=None):
         self.id = str(uuid.uuid4())
         self.login = login
-        self.password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        self.password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()) if password else None
+        self.email = email
 
     def __repr__(self):
         return f'<User {self.login}>'
 
     def check_password(self, password):
         return bcrypt.checkpw(password.encode('utf-8'), self.password)
+
+
+class SocialAccount(db.Model):
+    __tablename__ = 'social_account'
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship(User, backref=db.backref('social_accounts', lazy=True))
+
+    social_id = db.Column(db.Text, nullable=False)
+    social_name = db.Column(db.Text, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('social_id', 'social_name', name='social_pk'),)
+
+    def __repr__(self):
+        return f'<SocialAccount {self.social_name}:{self.user_id}>'
 
 
 def create_partition(target, connection, **kw) -> None:

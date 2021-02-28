@@ -3,21 +3,20 @@ import requests
 
 class TestLogin:
 
-    my_login = "111"
-    password = "111"
+    my_login = "121"
+    password = "112"
     main_url = 'http://localhost:5000/'
 
     def new(self):
         url = 'http://localhost:5000/new'
         result = requests.post(url, json={"login": self.my_login, "password": self.password})
         assert result.status_code == 201
-        assert result.text == 'New user created'
+        assert result.json()["message"] == 'New user created'
 
     def test_1login_failed(self):
         url = "".join((self.main_url, 'login'))
         result = requests.post(url, json={"password": self.password}, verify=False)
-        #assert result.status_code == 400
-        print(result.text)
+        assert result.status_code == 400
         assert result.json()["message"] == [{'login': ['Missing data for required field.']}]
         result = requests.post(url, json={"login": self.my_login}, verify=False)
         assert result.status_code == 400
@@ -31,8 +30,11 @@ class TestLogin:
         assert result.status_code == 200
         assert result.json()["message"] == "Please, send you pin code"
         global token
-        token = result.json()["token"]
-        assert len(result.json()["token"]) == 64
+        token = result.json()["access_token"]
+        assert len(result.json()["access_token"]) == 123
+        global refresh_token
+        refresh_token = result.json()["refresh_token"]
+        assert len(result.json()["refresh_token"]) == 64
 
     def test_3login2_failed(self):
         result = requests.post(self.main_url + 'login2', json={"login": self.my_login},
@@ -86,14 +88,14 @@ class TestLogin:
     def test_8login_again(self):
         result = requests.post(self.main_url + 'login', json={"login": self.my_login, "password": self.password})
         global token
-        token = result.json()["token"]
+        token = result.json()["access_token"]
         result = requests.post(self.main_url + 'login2', json={"login": self.my_login, "code": "0000"},
                                headers={'Authorization': token})
         assert result.status_code == 200
 
     def test_9sessions(self):
         result = requests.get(self.main_url + 'sessions', headers={'Authorization': token}, json={})
-        #assert result.status_code == 200
+        assert result.status_code == 200
         assert result.json()["message"] == "Session list received"
         assert result.json()["sessions"]
 

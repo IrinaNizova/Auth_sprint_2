@@ -19,7 +19,7 @@ class New(Resource):
             LoginSchema().load(dict(args))
         except ValidationError as e:
             return {'message': e.args}, 400
-        result = us.NewUser(login=args.get('login'), password=args.get('password'))
+        result = us.NewUser(login=args.get('login'), password=args.get('password')).create_new_user()
         return {'message': result}, CODES_MAP[result]
 
 
@@ -34,11 +34,10 @@ class Login(Resource):
             LoginSchema().load(dict(args))
         except ValidationError as e:
             return {'message': e.args}, 400
-        result = us.NewUser(login=args.get('login'), password=args.get('password'))
         result = us.Login1(login=args.get('login'), password=args.get('password')).start_login()
         if isinstance(result, tuple):
-            message, token = result
-            return {'message': message, 'token': token}, CODES_MAP[message]
+            message, access_token, refresh_token = result
+            return {'message': message, 'access_token': access_token, 'refresh_token': refresh_token}, CODES_MAP[message]
         else:
             return {'message': result}, CODES_MAP[result]
 
@@ -52,6 +51,7 @@ class Login2(Resource):
         """
         args = request.get_json(force=True)
         token = request.headers.get('Authorization')
+
         code = args.get('code')
         if not code:
             return {'message': CODE_NOT_EXIST}, CODES_MAP[CODE_NOT_EXIST]
@@ -96,9 +96,7 @@ class Logout(Resource):
         :return:
         """
         token = request.headers.get('Authorization')
-        print(token)
         us.logout(token)
-        print("succ")
         return {'message': "Logout successful"}
 
 
@@ -132,5 +130,5 @@ class RefreshToken(Resource):
         :return:
         новый токен
         """
-        message, token = us.create_refresh(old_token=request.headers.get('Authorization'))
+        message, token = us.create_refresh(refresh_token=request.headers.get('Authorization'))
         return {'message': NEW_TOKEN_CREATED, 'token': token}, CODES_MAP[NEW_TOKEN_CREATED]
