@@ -1,6 +1,6 @@
 from app import redis_db_access, redis_db_refresh, db
 from flask import request
-from db.models import User, UserSignIn
+from db.models import User, UserSignIn, Roles, RolesForUser
 import datetime
 import bcrypt
 from config.config import TOKEN_TIME, PIN_CODE_TIME, REFRESH_TOKEN_TIME
@@ -16,6 +16,10 @@ class RedisTokensStorage:
 
     def save_login_token(self, token, time, login) -> None:
         self.redis_adapter.setex(token, time, login)
+
+    def retrieve_login_by_token(self, token) -> str:
+        login = self.redis_adapter.get(token)
+        return login.decode('utf-8') if login else None
 
     def del_token(self, token):
         redis_db_access.delete(token)
@@ -42,13 +46,19 @@ class LoginMain:
 
 class NewUser:
 
-    def __init__(self, login, password):
+    def __init__(self, login, password, roles=None):
         self.login = login
         self.password = password
+        self.roles = roles or []
 
     def create_new_user(self):
         user = User(login=self.login, password=self.password)
         db.session.add(user)
+        for role in self.roles:
+            role_obj = Roles.query.filter_by(name=role).first()
+            if role_obj:
+                rfu = RolesForUser(user_id=user.id, role_id=role_obj.id)
+                db.session.add(rfu)
         db.session.commit()
         return NEW_USER_CREATED
 
@@ -181,9 +191,10 @@ def logout(token):
 
 def create_refresh(refresh_token):
     access_token = redis_db_refresh.get(refresh_token)
-    login = redis_db_access.retrieve_login_by_token(access_token)
+    login = get_user_id_token(access_token)
     AccessTokenStorage.del_token(access_token)
     new_access_token = create_access_token(login)
+
     AccessTokenStorage.save_login_token(new_access_token, TOKEN_TIME, login)
     RefreshTokenStorage.save_login_token(refresh_token, REFRESH_TOKEN_TIME, new_access_token)
     return NEW_TOKEN_CREATED, new_access_token

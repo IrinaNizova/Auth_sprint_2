@@ -1,7 +1,7 @@
 import requests
 
 
-class TestLogin:
+class Login:
 
     my_login = "121"
     password = "112"
@@ -99,3 +99,11 @@ class TestLogin:
         assert result.json()["message"] == "Session list received"
         assert result.json()["sessions"]
 
+    def test_10refresh_token(self):
+        import time
+        time.sleep(1)
+        result = requests.post(self.main_url + 'refresh', headers={'Authorization': token, 'Refresh': refresh_token}, json={})
+        assert result.json()["message"] == "New token created"
+        assert result.status_code == 201
+        assert len(result.json()["token"]) == 123
+        assert result.json()["token"] != token

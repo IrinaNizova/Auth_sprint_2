@@ -57,6 +57,20 @@ def create_partition(target, connection, **kw) -> None:
     )
 
 
+class Roles(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = db.Column(db.Text, nullable=False, unique=True)
+
+
+class RolesForUser(db.Model):
+    __tablename__ = 'roles_for_user'
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    role_id = db.Column(UUID(as_uuid=True), db.ForeignKey('roles.id'), nullable=False)
+
+
 class UserSignIn(db.Model):
     __tablename__ = 'users_sign_in'
     __table_args__ = {

@@ -19,7 +19,8 @@ class New(Resource):
             LoginSchema().load(dict(args))
         except ValidationError as e:
             return {'message': e.args}, 400
-        result = us.NewUser(login=args.get('login'), password=args.get('password')).create_new_user()
+        result = us.NewUser(login=args.get('login'), password=args.get('password'), roles=args.get('roles')).create_new_user()
+
         return {'message': result}, CODES_MAP[result]
 
 
@@ -130,5 +131,5 @@ class RefreshToken(Resource):
         :return:
         новый токен
         """
-        message, token = us.create_refresh(refresh_token=request.headers.get('Authorization'))
+        message, token = us.create_refresh(refresh_token=request.headers.get('Refresh'))
         return {'message': NEW_TOKEN_CREATED, 'token': token}, CODES_MAP[NEW_TOKEN_CREATED]

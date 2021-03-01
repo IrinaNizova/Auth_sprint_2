@@ -25,6 +25,7 @@ redis_db_refresh = redis.Redis(host=redis_1_params.host, port=redis_1_params.por
 
 import api.views as api_resources
 from api.sn_views import sn
+from api.roles_view import RoleAPI
 
 
 api.add_resource(api_resources.New, '/new')
@@ -34,6 +35,7 @@ api.add_resource(api_resources.Logout, '/logout')
 api.add_resource(api_resources.ChangeLogin, '/change-login')
 api.add_resource(api_resources.RefreshToken, '/refresh')
 api.add_resource(api_resources.Sessions, '/sessions')
+api.add_resource(RoleAPI, '/role')
 app.register_blueprint(sn)
 
 if __name__ == '__main__':
