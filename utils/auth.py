@@ -1,8 +1,11 @@
 import json
 from flask import request
 from functools import wraps
+import requests
 
-from app import redis_db_access, app
+from app import app
+from config.config import RECAPTHA_GOOGLE_URL, SECRET_KEY
+from utils.token import decode_token
 
 """
 Этот декоратор проверяет есть ли у нас валидный токен в заголовке
@@ -13,17 +16,23 @@ def login_reqiured(func):
         if not request.headers.get('Authorization'):
             return {'message': 'Token not exist'}, 403
         token = request.headers.get('Authorization')
-        session = redis_db_access.get(token)
-        if 'code' in request.get_json(force=True):
-            request.get_json(force=True).get('code')
-            if session.decode('utf-8') == request.get_json(force=True).get('code'):
-                return func(*args, **kwargs)
-        elif session.decode('utf-8') == 'True':
+        status, error = decode_token(token)
+        if status:
             return func(*args, **kwargs)
         else:
             return app.response_class(
-                response=json.dumps({'message': 'Login or password is not valid'}),
+                response=json.dumps({'message': error}),
                 status=403,
                 mimetype='application/json'
             )
     return decorated_function
+
+
+def check_recaptcha(recaptcha):
+    r = requests.post(RECAPTHA_GOOGLE_URL, {'response': recaptcha, 'secret': SECRET_KEY})
+    if r.status_code >= 400 or not r.json().get('success'):
+        return False
+    else:
+        return True
+
+

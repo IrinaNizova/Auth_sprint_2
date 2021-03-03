@@ -70,6 +70,21 @@ class RolesForUser(db.Model):
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     role_id = db.Column(UUID(as_uuid=True), db.ForeignKey('roles.id'), nullable=False)
 
+    __table_args__ = (db.UniqueConstraint('user_id', 'role_id', name='user_role_pk'),)
+
+
+class Permissions(db.Model):
+    __tablename__ = 'permissions'
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = db.Column(db.Text, nullable=False, unique=True)
+
+
+class PermissionsForRoles(db.Model):
+    __tablename__ = 'permissions_for_roles'
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    permission_id = db.Column(UUID(as_uuid=True), db.ForeignKey('permissions.id'), nullable=False)
+    role_id = db.Column(UUID(as_uuid=True), db.ForeignKey('roles.id'), nullable=False)
+
 
 class UserSignIn(db.Model):
     __tablename__ = 'users_sign_in'

@@ -2,11 +2,13 @@ NEW_USER_CREATED = 'New user created'
 LOGIN_NOT_EXIST = 'This login not exists'
 PASSWORD_NOT_VALID = 'Password is not valid'
 SEND_PIN_CODE = 'Please, send you pin code'
-CODE_NOT_EXIST = 'Code not exist'
+CODE_NOT_EXIST = 'Pin code not exist'
 AUTHORIZATION_SUCCESSFUL = 'Authorization successful'
 NEW_TOKEN_CREATED = 'New token created'
-NOT_VALID_LOGIN = 'Not this login'
+NOT_VALID_LOGIN = 'Not valid login'
 LOGIN_AND_PASSWORD_CHANGED_SUCCESSFUL = 'Login and password changed successful'
+CAPTURE_NOT_VALID = 'Capture check not succesful'
+NOT_VALID_TOKEN = 'Not valid token'
 
 CODES_MAP = {
     NEW_USER_CREATED: 201,
@@ -17,5 +19,7 @@ CODES_MAP = {
     AUTHORIZATION_SUCCESSFUL: 200,
     NEW_TOKEN_CREATED: 201,
     NOT_VALID_LOGIN: 400,
-    LOGIN_AND_PASSWORD_CHANGED_SUCCESSFUL: 201
+    LOGIN_AND_PASSWORD_CHANGED_SUCCESSFUL: 201,
+    CAPTURE_NOT_VALID: 400,
+    NOT_VALID_TOKEN: 403
 }

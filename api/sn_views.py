@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request, session, url_for
-from app import db, redis_db_access, redis_db_refresh
-from config.config import REFRESH_TOKEN_TIME, TOKEN_TIME
-from utils.token import create_access_token, create_refresh_token
+from flask import abort, Blueprint, jsonify, request, session, url_for
+from app import db, redis_db_pin_codes
+from utils.faker import get_random_code, send_code_to_email
+from utils.token import create_access_token
 from db.models import User, SocialAccount
 import json
 
@@ -9,7 +9,12 @@ sn = Blueprint('sn', __name__)
 
 from config.social_networks import github, google, facebook, vk
 
-NETWORKS = [facebook, github, google, vk]
+NETWORKS = {
+        'facebook': facebook,
+        'github': github,
+        'google': google,
+        'vk': vk
+    }
 
 
 def get_facebook_params_from_responce(resp):
@@ -55,19 +60,20 @@ def get_params_from_responce(sn, resp):
     return sn_funcs[sn](resp)
 
 
-def get_current_network(sn):
-    return [n for n in NETWORKS if n.name == sn][0]
-
-
 @sn.route('/login/<social_network>')
 def loging(social_network):
-    sn = get_current_network(social_network)
+    sn = NETWORKS.get(social_network)
+    if not sn:
+        abort(400, f"Not support social network {social_network}")
     return sn.authorize(callback=url_for('sn.auth', social_network=social_network, _external=True))
 
 
 @sn.route('/auth/<social_network>')
 def auth(social_network):
-    resp = get_current_network(social_network).authorized_response()
+    sn = NETWORKS.get(social_network)
+    if not sn:
+        abort(400, f"Not support social network {social_network}")
+    resp = sn.authorized_response()
     if resp is None or resp.get('access_token') is None:
         return 'Access denied: reason=%s error=%s resp=%s' % (
             request.args['error'],
@@ -90,9 +96,9 @@ def auth(social_network):
         db.session.add(sa)
         db.session.commit()
 
-    access_token = create_access_token(login)
-    redis_db_access.setex(access_token)
-    return jsonify({'access_token': access_token, 'refresh_token': resp['access_token']})
+    pin_code = get_random_code()
+    send_code_to_email(pin_code, email)
+    return jsonify({'pin_code': pin_code, 'email': email, 'message': f"Please, send pin code from you email {email}"})
 
 
 @github.tokengetter

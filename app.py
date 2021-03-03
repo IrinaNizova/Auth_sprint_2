@@ -18,14 +18,15 @@ app.config['SECRET_KEY'] = SECRET_KEY
 
 
 db = SQLAlchemy(app)
-redis_db_access = redis.Redis(host=redis_0_params.host, port=redis_0_params.port, db=redis_0_params.db)
-redis_db_refresh = redis.Redis(host=redis_1_params.host, port=redis_1_params.port, db=redis_1_params.db)
+redis_db_invalid_tokens = redis.Redis(host=redis_0_params.host, port=redis_0_params.port, db=redis_0_params.db)
+redis_db_pin_codes = redis.Redis(host=redis_1_params.host, port=redis_1_params.port, db=redis_1_params.db)
 
-#logging.basicConfig(filename='log.log', level=logging.DEBUG)
+logging.basicConfig(filename='log.log', level=logging.DEBUG)
 
 import api.views as api_resources
 from api.sn_views import sn
-from api.roles_view import RoleAPI
+from api.roles_view import RoleAPI, r
+from api.permissions_view import PermissionAPI
 
 
 api.add_resource(api_resources.New, '/new')
@@ -36,7 +37,9 @@ api.add_resource(api_resources.ChangeLogin, '/change-login')
 api.add_resource(api_resources.RefreshToken, '/refresh')
 api.add_resource(api_resources.Sessions, '/sessions')
 api.add_resource(RoleAPI, '/role')
+api.add_resource(PermissionAPI, '/perm')
 app.register_blueprint(sn)
+app.register_blueprint(r)
 
 if __name__ == '__main__':
     db.create_all()

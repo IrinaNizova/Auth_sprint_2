@@ -11,7 +11,7 @@ class LoginSchema(ma.SQLAlchemyAutoSchema):
 
     login = fields.String(required=True)
     password = fields.String(required=True)
-    roles = fields.List(cls_or_instance=int)
+    roles = fields.List(cls_or_instance=fields.Integer)
 
 
 class ChangeLoginSchema(ma.SQLAlchemyAutoSchema):
@@ -27,4 +27,11 @@ class RoleSchema(ma.SQLAlchemySchema):
     name = fields.String(required=True)
 
 
+class PermissionSchema(ma.SQLAlchemySchema):
+    id = fields.String(required=True)
+    name = fields.String(required=True)
 
+
+class PermissionsForRolesSchema(ma.SQLAlchemySchema):
+    role = fields.String(required=True)
+    permission = fields.String(required=True)

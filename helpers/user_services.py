@@ -1,57 +1,35 @@
-from app import redis_db_access, redis_db_refresh, db
+from app import redis_db_invalid_tokens, redis_db_pin_codes, db
 from flask import request
 from db.models import User, UserSignIn, Roles, RolesForUser
 import datetime
 import bcrypt
 from config.config import TOKEN_TIME, PIN_CODE_TIME, REFRESH_TOKEN_TIME
 from helpers.results_map import *
+from utils.auth import check_recaptcha
 from utils.faker import send_code_to_email, get_random_code
 from user_agents import parse
-from utils.token import create_access_token, create_refresh_token, get_user_id_token
+from utils.token import create_access_token, create_refresh_token, get_user_id_token, decode_token, AUTH_REFRESH_TOKEN
 
 
-class RedisTokensStorage:
-    def __init__(self, redis_adapter=redis_db_access):
-        self.redis_adapter = redis_adapter
-
-    def save_login_token(self, token, time, login) -> None:
-        self.redis_adapter.setex(token, time, login)
-
-    def retrieve_login_by_token(self, token) -> str:
-        login = self.redis_adapter.get(token)
-        return login.decode('utf-8') if login else None
-
-    def del_token(self, token):
-        redis_db_access.delete(token)
-
-
-AccessTokenStorage = RedisTokensStorage(redis_db_access)
-RefreshTokenStorage = RedisTokensStorage(redis_db_refresh)
-
-
-class LoginMain:
-
-    def __init__(self, login=None, token=None):
-        if login:
-            self.login = login
-        elif token:
-            self.login = get_user_id_token(token)
-
-    def get_user_by_login(self):
-        user = User.query.filter_by(login=self.login).first()
-        if not user:
-            return LOGIN_NOT_EXIST
-        return user
+def get_user_by_login(login):
+    user = User.query.filter_by(login=login).first()
+    if not user:
+        return LOGIN_NOT_EXIST
+    return user
 
 
 class NewUser:
 
-    def __init__(self, login, password, roles=None):
+    def __init__(self, login, password, roles=None, recaptcha=None):
         self.login = login
         self.password = password
         self.roles = roles or []
+        self.recaptcha = recaptcha
 
     def create_new_user(self):
+        if self.recaptcha:
+            if not check_recaptcha(self.recaptcha):
+                return CAPTURE_NOT_VALID
         user = User(login=self.login, password=self.password)
         db.session.add(user)
         for role in self.roles:
@@ -63,14 +41,14 @@ class NewUser:
         return NEW_USER_CREATED
 
 
-class Login1(LoginMain):
+class Login1:
 
     def __init__(self, login, password):
-        super(Login1, self).__init__(login=login)
+        self.login=login
         self.password = password
 
     def check_password(self):
-        user = self.get_user_by_login()
+        user = get_user_by_login(self.login)
         if str(user) == LOGIN_NOT_EXIST:
             return LOGIN_NOT_EXIST
         if not user.check_password(self.password):
@@ -81,31 +59,24 @@ class Login1(LoginMain):
         send_code_to_email(pin_code, self.login)
         return pin_code
 
-    def set_temporary_token(self, pin_code):
-        access_token = create_access_token(self.login)
-        retresh_token = create_refresh_token()
-        redis_db_access.setex(access_token, PIN_CODE_TIME, pin_code)
-        redis_db_refresh.setex(retresh_token, REFRESH_TOKEN_TIME, access_token)
-        return access_token, retresh_token
-
     def start_login(self):
         error = self.check_password()
         if error: return error
         pin_code = self.create_and_send_pin_code()
-        access_token, retresh_token = self.set_temporary_token(pin_code)
-        return SEND_PIN_CODE, access_token, retresh_token
+        redis_db_pin_codes.setex(self.login, PIN_CODE_TIME, pin_code)
+        return SEND_PIN_CODE
 
 
-class Login2(LoginMain):
+class Login2:
 
-    def __init__(self, pin_code, token):
-        super(Login2, self).__init__(token=token)
+    def __init__(self, login, pin_code):
+        self.login = login
         self.pin_code = pin_code
-        self.token = token
 
-    def set_standart_token(self, token):
-        AccessTokenStorage.del_token(token)
-        AccessTokenStorage.save_login_token(token, TOKEN_TIME, 'True')
+    def set_tokens(self):
+        access_token = create_access_token(self.login)
+        refresh_token = create_refresh_token(self.login)
+        return access_token, refresh_token
 
     def get_user_agent_type(self, user_agent):
         user_agent_string = parse(user_agent)
@@ -119,7 +90,7 @@ class Login2(LoginMain):
         return user_device_type
 
     def create_login_note(self):
-        user = self.get_user_by_login()
+        user = get_user_by_login(self.login)
         user_agent = request.headers['User-Agent']
         user_device_type = self.get_user_agent_type(user_agent)
         user_sign_in = UserSignIn(user_id=user.id, logined_by=datetime.datetime.now(),
@@ -128,15 +99,20 @@ class Login2(LoginMain):
         db.session.commit()
 
     def continue_login(self):
-        self.set_standart_token(self.token)
+        pin_code = redis_db_pin_codes.get(self.login)
+        if not pin_code:
+            return NOT_VALID_LOGIN
+        if self.pin_code != pin_code.decode('utf-8'):
+            return CODE_NOT_EXIST
+        access_token, refresh_token = self.set_tokens()
         self.create_login_note()
-        return AUTHORIZATION_SUCCESSFUL, self.token
+        return AUTHORIZATION_SUCCESSFUL, access_token, refresh_token
 
 
-class ChangeLogin(LoginMain):
+class ChangeLogin:
 
     def __init__(self, login, old_password, new_password, is_remove_sessions, token):
-        super(ChangeLogin, self).__init__(login=login)
+        self.login = login
         self.old_password = old_password
         self.new_password = new_password
         self.is_remove_sessions = is_remove_sessions
@@ -148,7 +124,7 @@ class ChangeLogin(LoginMain):
             return NOT_VALID_LOGIN
 
     def get_and_validate_user_object(self):
-        user = self.get_user_by_login()
+        user = get_user_by_login(self.login)
         if not user.check_password(self.old_password):
             return PASSWORD_NOT_VALID
         return user
@@ -174,27 +150,49 @@ class ChangeLogin(LoginMain):
         return LOGIN_AND_PASSWORD_CHANGED_SUCCESSFUL
 
 
-class Sessions(LoginMain):
+class Sessions:
 
     def __init__(self, token):
-        super(Sessions, self).__init__(token=token)
+        self.login = get_user_id_token(token)
 
     def get_sessions_by_user(self):
-        user = self.get_user_by_login()
+        user = get_user_by_login(self.login)
         user_sessions = UserSignIn.query.filter_by(user_id=user.id).all()
         return [u.to_dict() for u in user_sessions]
 
 
-def logout(token):
-    AccessTokenStorage.del_token(token)
+def logout(token, refresh_token=None):
+    if refresh_token:
+        redis_db_invalid_tokens.set(refresh_token, "Invalid")
+    redis_db_invalid_tokens.set(token, "Invalid")
 
 
-def create_refresh(refresh_token):
-    access_token = redis_db_refresh.get(refresh_token)
-    login = get_user_id_token(access_token)
-    AccessTokenStorage.del_token(access_token)
-    new_access_token = create_access_token(login)
+def create_refresh(refresh_token, access_token):
+    invalid_token = redis_db_invalid_tokens.get(refresh_token)
+    if invalid_token:
+        return NOT_VALID_TOKEN
+    status, token_dict = decode_token(refresh_token, token_type=AUTH_REFRESH_TOKEN)
+    if not status:
+        return NOT_VALID_TOKEN
+    redis_db_invalid_tokens.set(access_token, "Invalid")
+    new_access_token = create_access_token(token_dict['id'])
+    new_refresh_token = create_refresh_token(token_dict['id'])
+    return NEW_TOKEN_CREATED, new_access_token, new_refresh_token
 
-    AccessTokenStorage.save_login_token(new_access_token, TOKEN_TIME, login)
-    RefreshTokenStorage.save_login_token(refresh_token, REFRESH_TOKEN_TIME, new_access_token)
-    return NEW_TOKEN_CREATED, new_access_token
+
+def add_role_to_user(token, role):
+    login = get_user_id_token(token)
+    user_obj = User.query.filter_by(login=login).first()
+    role_obj = Roles.query.filter_by(name=role).first()
+    rfu = RolesForUser(user_id=user_obj.id, role_id=role_obj.id)
+    db.session.add(rfu)
+    db.session.commit()
+
+
+def delete_role_to_user(token, role):
+    login = get_user_id_token(token)
+    user_obj = User.query.filter_by(login=login).first()
+    role_obj = Roles.query.filter_by(name=role).first()
+    rfu = RolesForUser.query.filter_by(user_id=user_obj.id, role_id=role_obj.id)
+    db.session.delete(rfu)
+    db.session.commit()

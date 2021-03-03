@@ -40,3 +40,5 @@ redis_1_params = Redis(host=os.getenv('REDIS_HOST', 'localhost'),
 TOKEN_TIME = 60 * 5
 PIN_CODE_TIME = 60
 REFRESH_TOKEN_TIME = 600 * 5
+
+RECAPTHA_GOOGLE_URL = 'https://www.google.com/recaptcha/api/siteverify'

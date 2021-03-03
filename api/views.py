@@ -19,7 +19,7 @@ class New(Resource):
             LoginSchema().load(dict(args))
         except ValidationError as e:
             return {'message': e.args}, 400
-        result = us.NewUser(login=args.get('login'), password=args.get('password'), roles=args.get('roles')).create_new_user()
+        result = us.NewUser(login=args.get('login'), password=args.get('password'), roles=args.get('roles'), recaptcha=args.get('roles')).create_new_user()
 
         return {'message': result}, CODES_MAP[result]
 
@@ -36,29 +36,28 @@ class Login(Resource):
         except ValidationError as e:
             return {'message': e.args}, 400
         result = us.Login1(login=args.get('login'), password=args.get('password')).start_login()
-        if isinstance(result, tuple):
-            message, access_token, refresh_token = result
-            return {'message': message, 'access_token': access_token, 'refresh_token': refresh_token}, CODES_MAP[message]
-        else:
-            return {'message': result}, CODES_MAP[result]
+        return {'message': result}, CODES_MAP[result]
 
 
 class Login2(Resource):
 
-    @login_reqiured
     def post(self):
         """
         Отправляем логин и пин-код. Если в заголовках правильный токен - мы успешно залогинились
         """
         args = request.get_json(force=True)
-        token = request.headers.get('Authorization')
 
         code = args.get('code')
+        login = args.get('login')
         if not code:
             return {'message': CODE_NOT_EXIST}, CODES_MAP[CODE_NOT_EXIST]
 
-        result = us.Login2(pin_code=code, token=token).continue_login()
-        return {'message': result[0]}, CODES_MAP[result[0]]
+        result = us.Login2(pin_code=code, login=login).continue_login()
+        if isinstance(result, tuple):
+            message, access_token, refresh_token = result
+            return {'message': message, 'access_token': access_token, 'refresh_token': refresh_token}, CODES_MAP[message]
+        else:
+            return {'message': result}, CODES_MAP[result]
 
 
 class Sessions(Resource):
@@ -97,7 +96,8 @@ class Logout(Resource):
         :return:
         """
         token = request.headers.get('Authorization')
-        us.logout(token)
+        refresh_token = request.headers.get('Refresh')
+        us.logout(token, refresh_token)
         return {'message': "Logout successful"}
 
 
@@ -131,5 +131,8 @@ class RefreshToken(Resource):
         :return:
         новый токен
         """
-        message, token = us.create_refresh(refresh_token=request.headers.get('Refresh'))
-        return {'message': NEW_TOKEN_CREATED, 'token': token}, CODES_MAP[NEW_TOKEN_CREATED]
+        result = us.create_refresh(refresh_token=request.headers.get('Refresh'), access_token=request.headers.get('Authorization'))
+        if isinstance(result, tuple):
+            return {'message': result[0], 'access_token': result[1], 'refresh_token': result[2]}, CODES_MAP[result[0]]
+        else:
+            return {'message': result}, CODES_MAP[result]
